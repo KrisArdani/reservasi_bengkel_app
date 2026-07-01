@@ -55,16 +55,68 @@ class CustomerRepository {
     );
   }
 
+  Future<void> updateKendaraan({
+    required int idKendaraan,
+    required String merk,
+    required String tipe,
+    required String platNomer,
+  }) async {
+    final db = await _dbHelper.database;
+    
+    // Validate unique plat_nomer excluding current vehicle
+    final existing = await db.query(
+      'kendaraan',
+      where: 'plat_nomer = ? AND id_kendaraan != ?',
+      whereArgs: [platNomer, idKendaraan],
+    );
+    if (existing.isNotEmpty) {
+      throw Exception('Plat Nomor sudah terdaftar di kendaraan lain');
+    }
+
+    await db.update(
+      'kendaraan',
+      {
+        'merk': merk,
+        'tipe': tipe,
+        'plat_nomer': platNomer,
+      },
+      where: 'id_kendaraan = ?',
+      whereArgs: [idKendaraan],
+    );
+  }
+
+  Future<void> deleteKendaraan(int idKendaraan) async {
+    final db = await _dbHelper.database;
+    
+    // Cek apakah ada reservasi aktif
+    final reservasi = await db.query(
+      'reservasi',
+      where: 'id_kendaraan = ? AND status IN (?, ?, ?, ?)',
+      whereArgs: [idKendaraan, 'Menunggu Konfirmasi', 'Dikonfirmasi', 'Reschedule Diusulkan', 'Dalam Proses'],
+    );
+    
+    if (reservasi.isNotEmpty) {
+      throw Exception('Tidak bisa menghapus kendaraan yang masih memiliki reservasi aktif');
+    }
+
+    await db.delete(
+      'kendaraan',
+      where: 'id_kendaraan = ?',
+      whereArgs: [idKendaraan],
+    );
+  }
+
   // --- RESERVASI ---
 
   Future<List<ReservasiModel>> getReservasi(int idPelanggan) async {
     final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'reservasi',
-      where: 'id_pelanggan = ?',
-      whereArgs: [idPelanggan],
-      orderBy: 'tanggal DESC, jam DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT r.*, m.nama as nama_montir
+      FROM reservasi r
+      LEFT JOIN montir m ON r.id_montir = m.id_montir
+      WHERE r.id_pelanggan = ?
+      ORDER BY r.tanggal DESC, r.jam DESC
+    ''', [idPelanggan]);
 
     return List.generate(maps.length, (i) {
       return ReservasiModel.fromMap(maps[i]);

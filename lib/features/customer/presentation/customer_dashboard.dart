@@ -5,6 +5,8 @@ import '../../auth/application/auth_controller.dart';
 import '../application/customer_controller.dart';
 import 'widgets/customer_vehicle_tab.dart';
 import 'package:intl/intl.dart';
+import '../../../core/widgets/fade_in_slide.dart';
+import '../../../core/utils/app_feedback.dart';
 
 class CustomerDashboard extends ConsumerStatefulWidget {
   const CustomerDashboard({super.key});
@@ -28,6 +30,7 @@ class _CustomerDashboardState extends ConsumerState<CustomerDashboard> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
+              AppFeedback.playClick();
               ref.read(authControllerProvider.notifier).logout();
               context.go('/login');
             },
@@ -38,6 +41,7 @@ class _CustomerDashboardState extends ConsumerState<CustomerDashboard> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
+          AppFeedback.playClick();
           setState(() {
             _currentIndex = index;
           });
@@ -121,42 +125,60 @@ class _CustomerDashboardState extends ConsumerState<CustomerDashboard> {
                 statusIcon = Icons.cancel_outlined;
               }
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Res-${res.idReservasi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Row(
-                            children: [
-                              Icon(statusIcon, color: statusColor, size: 16),
-                              const SizedBox(width: 4),
-                              Text(
-                                res.status, 
-                                style: TextStyle(
-                                  color: statusColor, 
-                                  fontWeight: FontWeight.bold, 
-                                  fontSize: 12
-                                )
-                              ),
-                            ],
-                          ),
+              final index = historyReservasi.indexOf(res);
+              final delayMs = (index * 40).clamp(0, 400);
+
+              return FadeInSlide(
+                delay: Duration(milliseconds: delayMs),
+                offset: const Offset(0, 15),
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(
+                      color: Color(0xFF2D2D2D),
+                      width: 1,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Res-${res.idReservasi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Row(
+                              children: [
+                                Icon(statusIcon, color: statusColor, size: 16),
+                                const SizedBox(width: 4),
+                                Text(
+                                  res.status, 
+                                  style: TextStyle(
+                                    color: statusColor, 
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 12
+                                  )
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text('Kendaraan: $merk $tipe ($platNomer)'),
+                        Text('Jadwal: ${res.tanggal} | ${res.jam}'),
+                        if (res.namaMontir != null) ...[
+                          const SizedBox(height: 4),
+                          Text('Montir: ${res.namaMontir}', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ],
-                      ),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                      Text('Kendaraan: $merk $tipe ($platNomer)'),
-                      Text('Jadwal: ${res.tanggal} | ${res.jam}'),
-                      if (res.keluhan != null && res.keluhan!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text('Keluhan: ${res.keluhan}'),
-                      ]
-                    ],
+                        if (res.keluhan != null && res.keluhan!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('Keluhan: ${res.keluhan}'),
+                        ]
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -208,7 +230,10 @@ class _CustomerDashboardState extends ConsumerState<CustomerDashboard> {
                       backgroundColor: Colors.white,
                       foregroundColor: Theme.of(context).primaryColor,
                     ),
-                    onPressed: () => _showBookingDialog(context),
+                    onPressed: () {
+                      AppFeedback.playClick();
+                      _showBookingDialog(context);
+                    },
                     child: const Text('Buat Reservasi'),
                   ),
                 ],
@@ -235,48 +260,123 @@ class _CustomerDashboardState extends ConsumerState<CustomerDashboard> {
           else
             ...activeReservasi.map((res) {
               final k = customerState.kendaraan.firstWhere((k) => k.idKendaraan == res.idKendaraan, orElse: () => throw Exception('Kendaraan tidak ditemukan'));
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Res-${res.idReservasi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Chip(
-                            label: Text(res.status, style: const TextStyle(fontSize: 12)),
-                            backgroundColor: res.status == 'Reschedule Diusulkan' ? Colors.orange : null,
+              final index = activeReservasi.indexOf(res);
+              final delayMs = (index * 40).clamp(0, 400);
+
+              return FadeInSlide(
+                delay: Duration(milliseconds: delayMs),
+                offset: const Offset(0, 15),
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: const Color(0xFF1D4ED8).withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 4,
+                            color: const Color(0xFF1D4ED8),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Kendaraan: ${k.merk} ${k.tipe} (${k.platNomer})'),
-                      Text('Jadwal: ${res.tanggal} | ${res.jam}'),
-                      if (res.status == 'Reschedule Diusulkan') ...[
-                        const Divider(),
-                        const Text('Admin mengusulkan jadwal di atas. Apakah Anda setuju?'),
-                        Row(
-                          children: [
-                            TextButton(
-                              onPressed: () {
-                                ref.read(customerControllerProvider.notifier).actionReschedule(res.idReservasi, false);
-                              },
-                              child: const Text('Tolak & Batalkan', style: TextStyle(color: Colors.red)),
-                            ),
-                            const Spacer(),
-                            ElevatedButton(
-                              onPressed: () {
-                                ref.read(customerControllerProvider.notifier).actionReschedule(res.idReservasi, true);
-                              },
-                              child: const Text('Setujui'),
-                            ),
-                          ],
-                        )
-                      ]
-                    ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Res-${res.idReservasi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  Chip(
+                                    label: Text(res.status, style: const TextStyle(fontSize: 12)),
+                                    backgroundColor: res.status == 'Reschedule Diusulkan' ? Colors.orange : null,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text('Kendaraan: ${k.merk} ${k.tipe} (${k.platNomer})'),
+                              Text('Jadwal: ${res.tanggal} | ${res.jam}'),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                onPressed: () {
+                                  AppFeedback.playClick();
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (context) {
+                                      return Padding(
+                                        padding: const EdgeInsets.all(24.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            const Text('Detail Reservasi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                            const Divider(),
+                                            const SizedBox(height: 12),
+                                            Text('No Reservasi: Res-${res.idReservasi}'),
+                                            Text('Status: ${res.status}'),
+                                            const SizedBox(height: 12),
+                                            Text('Kendaraan: ${k.merk} ${k.tipe} (${k.platNomer})'),
+                                            Text('Jadwal: ${res.tanggal} | ${res.jam}'),
+                                            const SizedBox(height: 12),
+                                            Text('Keluhan: ${res.keluhan ?? "-"}'),
+                                            const SizedBox(height: 12),
+                                            if (res.namaMontir != null)
+                                              Text('Montir: ${res.namaMontir}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                            const SizedBox(height: 24),
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                AppFeedback.playClick();
+                                                Navigator.pop(context);
+                                              },
+                                              child: const Text('Tutup'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                                child: const Text('Lihat Detail'),
+                              ),
+                              if (res.status == 'Reschedule Diusulkan') ...[
+                                  const Divider(),
+                                  const Text('Admin mengusulkan jadwal di atas. Apakah Anda setuju?'),
+                                  Row(
+                                    children: [
+                                      TextButton(
+                                        onPressed: () {
+                                          AppFeedback.playClick();
+                                          ref.read(customerControllerProvider.notifier).actionReschedule(res.idReservasi, false);
+                                        },
+                                        child: const Text('Tolak & Batalkan', style: TextStyle(color: Colors.red)),
+                                      ),
+                                      const Spacer(),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          AppFeedback.playClick();
+                                          ref.read(customerControllerProvider.notifier).actionReschedule(res.idReservasi, true);
+                                        },
+                                        child: const Text('Setujui'),
+                                      ),
+                                    ],
+                                  )
+                              ]
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -417,6 +517,7 @@ class _BookingBottomSheetState extends ConsumerState<_BookingBottomSheet> {
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: () async {
+                  AppFeedback.playClick();
                   if (_formKey.currentState!.validate() && _selectedDate != null) {
                     try {
                       await ref.read(customerControllerProvider.notifier).addReservasi(
@@ -427,14 +528,17 @@ class _BookingBottomSheetState extends ConsumerState<_BookingBottomSheet> {
                       );
                       if (context.mounted) {
                         Navigator.pop(context);
+                        AppFeedback.playSuccess();
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reservasi berhasil dibuat')));
                       }
                     } catch (e) {
                       if (context.mounted) {
+                        AppFeedback.playError();
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
                       }
                     }
                   } else if (_selectedDate == null) {
+                    AppFeedback.playError();
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tanggal servis wajib dipilih')));
                   }
                 },

@@ -9,6 +9,7 @@ class ReservasiModel extends Equatable {
   final String jam;
   final String? keluhan;
   final String status;
+  final String? namaMontir;
 
   const ReservasiModel({
     required this.idReservasi,
@@ -19,6 +20,7 @@ class ReservasiModel extends Equatable {
     required this.jam,
     this.keluhan,
     required this.status,
+    this.namaMontir,
   });
 
   factory ReservasiModel.fromMap(Map<String, dynamic> map) {
@@ -31,6 +33,7 @@ class ReservasiModel extends Equatable {
       jam: map['jam'] as String,
       keluhan: map['keluhan'] as String?,
       status: map['status'] as String,
+      namaMontir: map['nama_montir'] as String?,
     );
   }
 
@@ -44,6 +47,7 @@ class ReservasiModel extends Equatable {
       'jam': jam,
       'keluhan': keluhan,
       'status': status,
+      'nama_montir': namaMontir,
     };
   }
 
@@ -57,5 +61,6 @@ class ReservasiModel extends Equatable {
         jam,
         keluhan,
         status,
+        namaMontir,
       ];
 }

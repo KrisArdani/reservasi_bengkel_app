@@ -34,6 +34,55 @@ class AdminRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getMontirWorkload() async {
+    final db = await _dbHelper.database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT m.id_montir, m.nama, m.keahlian, 
+             COUNT(r.id_reservasi) as jumlah_tugas
+      FROM montir m
+      LEFT JOIN reservasi r ON m.id_montir = r.id_montir 
+        AND r.status IN ('Dikonfirmasi', 'Proses', 'Dalam Proses')
+      GROUP BY m.id_montir, m.nama, m.keahlian
+      ORDER BY jumlah_tugas DESC
+    ''');
+    return maps;
+  }
+
+  Future<void> addMontir(String nama, String keahlian) async {
+    final db = await _dbHelper.database;
+    await db.insert('montir', {
+      'nama': nama,
+      'keahlian': keahlian,
+    });
+  }
+
+  Future<void> updateMontir(int idMontir, String nama, String keahlian) async {
+    final db = await _dbHelper.database;
+    await db.update(
+      'montir',
+      {'nama': nama, 'keahlian': keahlian},
+      where: 'id_montir = ?',
+      whereArgs: [idMontir],
+    );
+  }
+
+  Future<void> deleteMontir(int idMontir) async {
+    final db = await _dbHelper.database;
+    
+    // Check for active reservations
+    final reservasi = await db.query(
+      'reservasi',
+      where: 'id_montir = ? AND status IN (?, ?, ?, ?)',
+      whereArgs: [idMontir, 'Menunggu Konfirmasi', 'Dikonfirmasi', 'Reschedule Diusulkan', 'Dalam Proses'],
+    );
+    
+    if (reservasi.isNotEmpty) {
+      throw Exception('Tidak bisa menghapus montir yang memiliki reservasi aktif');
+    }
+    
+    await db.delete('montir', where: 'id_montir = ?', whereArgs: [idMontir]);
+  }
+
   Future<void> assignMontir(int idReservasi, int idMontir) async {
     final db = await _dbHelper.database;
     

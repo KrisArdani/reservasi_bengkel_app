@@ -92,6 +92,38 @@ class CustomerController extends _$CustomerController {
     }
   }
 
+  Future<void> updateKendaraan({
+    required int idKendaraan,
+    required String merk,
+    required String tipe,
+    required String platNomer,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _repository.updateKendaraan(
+        idKendaraan: idKendaraan,
+        merk: merk,
+        tipe: tipe,
+        platNomer: platNomer,
+      );
+      await loadData();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  Future<void> deleteKendaraan(int idKendaraan) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _repository.deleteKendaraan(idKendaraan);
+      await loadData();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
   Future<void> addReservasi({
     required int idKendaraan,
     required String tanggal,

@@ -6,6 +6,10 @@ import '../../auth/application/auth_controller.dart';
 import '../application/admin_controller.dart';
 import '../../../core/models/reservasi_detail_model.dart';
 import '../../../core/widgets/diagonal_sidebar.dart';
+import '../../../core/models/montir_model.dart';
+import '../../../core/widgets/fade_in_slide.dart';
+import '../../../core/widgets/shimmer_placeholder.dart';
+import '../../../core/utils/app_feedback.dart';
 
 class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
@@ -22,6 +26,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     SidebarItem(title: 'Dashboard', icon: Icons.dashboard, route: '/admin'),
     SidebarItem(title: 'Kelola Reservasi', icon: Icons.build, route: '/admin/kelola'),
     SidebarItem(title: 'Jadwal & Montir', icon: Icons.event_note, route: '/admin/jadwal'),
+    SidebarItem(title: 'Beban Kerja Montir', icon: Icons.people_alt, route: '/admin/workload'),
+    SidebarItem(title: 'Manajemen Montir', icon: Icons.manage_accounts, route: '/admin/montir'),
     SidebarItem(title: 'Laporan', icon: Icons.assignment, route: '/admin/laporan'),
   ];
 
@@ -33,10 +39,14 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   final _keluhanController = TextEditingController();
 
   // Laporan Filters
-  String _selectedPeriod = 'Bulan Ini';
+  String _selectedPeriod = 'Semua';
   String _selectedStatus = 'Semua Status';
-  DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
-  DateTime _endDate = DateTime.now();
+  DateTime _startDate = DateTime(2025, 1, 1);
+  DateTime _endDate = DateTime(2030, 12, 31);
+
+  // Queue Filters
+  String _queueSearchQuery = '';
+  String _queueFilterStatus = 'Semua Status';
 
   @override
   void dispose() {
@@ -69,11 +79,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       items: _sidebarItems,
       activeIndex: _selectedMenuIndex,
       onItemTap: (index) {
+        AppFeedback.playClick();
         setState(() {
           _selectedMenuIndex = index;
         });
       },
       onLogout: () {
+        AppFeedback.playClick();
         ref.read(authControllerProvider.notifier).logout();
         context.go('/login');
       },
@@ -86,7 +98,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         vertical: isDesktop ? 32 : 16,
       ),
       child: adminState.isLoading && adminState.reservasi.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildShimmerLoadingList()
           : _buildContentSection(adminState),
     );
 
@@ -125,15 +137,309 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         return _buildQueueCardsView(state);
       case 2: // Jadwal & Montir Form
         return _buildJadwalMontirSection(state);
-      case 3: // Laporan
+      case 3: // Beban Kerja Montir
+        return _buildWorkloadSection(state);
+      case 4: // Manajemen Montir
+        return _buildMontirSection(state);
+      case 5: // Laporan
         return _buildLaporanSection(state);
       default:
         return const Center(child: Text('Section not found'));
     }
   }
 
+  // --- TAB: BEBAN KERJA MONTIR ---
+  Widget _buildWorkloadSection(AdminState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Beban Kerja Montir',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        const SizedBox(height: 24),
+        Expanded(
+          child: state.montirWorkload.isEmpty
+              ? const Center(child: Text('Belum ada data montir atau tugas.'))
+              : ListView.builder(
+                  itemCount: state.montirWorkload.length,
+                  itemBuilder: (context, index) {
+                    final wl = state.montirWorkload[index];
+                    final jumlahTugas = wl['jumlah_tugas'] as int;
+                    final delayMs = (index * 50).clamp(0, 400);
+
+                    return FadeInSlide(
+                      delay: Duration(milliseconds: delayMs),
+                      offset: const Offset(0, 15),
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: const Color(0xFF1D4ED8).withValues(alpha: 0.12),
+                            width: 1,
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: jumlahTugas > 3 ? Colors.red.withValues(alpha: 0.2) : Colors.green.withValues(alpha: 0.2),
+                            child: Text(
+                              jumlahTugas.toString(), 
+                              style: TextStyle(color: jumlahTugas > 3 ? Colors.red : Colors.green, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Text(wl['nama'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(wl['keahlian'] ?? '-'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              PulsingDot(color: jumlahTugas > 3 ? Colors.red : Colors.green),
+                              const SizedBox(width: 8),
+                              jumlahTugas > 3
+                                  ? const Text('Sibuk', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+                                  : const Text('Tersedia', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // --- TAB: MANAJEMEN MONTIR ---
+  Widget _buildMontirSection(AdminState state) {
+    final isDesktop = isDesktopLayout(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        isDesktop
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Manajemen Montir',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Tambah Montir'),
+                    onPressed: () {
+                      AppFeedback.playClick();
+                      _showMontirDialog();
+                    },
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Manajemen Montir',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Tambah Montir'),
+                    onPressed: () {
+                      AppFeedback.playClick();
+                      _showMontirDialog();
+                    },
+                  ),
+                ],
+              ),
+        const SizedBox(height: 24),
+        Expanded(
+          child: state.montir.isEmpty
+              ? const Center(child: Text('Belum ada data montir.'))
+              : ListView.builder(
+                  itemCount: state.montir.length,
+                  itemBuilder: (context, index) {
+                    final m = state.montir[index];
+                    final delayMs = (index * 40).clamp(0, 400);
+
+                    return FadeInSlide(
+                      delay: Duration(milliseconds: delayMs),
+                      offset: const Offset(0, 15),
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: const Color(0xFF1D4ED8).withValues(alpha: 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 4,
+                                  color: const Color(0xFF1D4ED8),
+                                ),
+                              ),
+                              ListTile(
+                                contentPadding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
+                                leading: const Icon(Icons.person, size: 40, color: Color(0xFF1D4ED8)),
+                                title: Text(m.nama, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text(m.keahlian ?? '-'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.blue),
+                                      onPressed: () {
+                                        AppFeedback.playClick();
+                                        _showMontirDialog(montir: m);
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () async {
+                                        AppFeedback.playClick();
+                                        final messenger = ScaffoldMessenger.of(context);
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text('Hapus Montir'),
+                                            content: const Text('Yakin ingin menghapus montir ini?'),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () {
+                                                  AppFeedback.playClick();
+                                                  Navigator.pop(ctx, false);
+                                                }, 
+                                                child: const Text('Batal')
+                                              ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                                onPressed: () {
+                                                  AppFeedback.playClick();
+                                                  Navigator.pop(ctx, true);
+                                                }, 
+                                                child: const Text('Hapus'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm == true && mounted) {
+                                          try {
+                                            await ref.read(adminControllerProvider.notifier).deleteMontir(m.idMontir);
+                                            AppFeedback.playSuccess();
+                                            messenger.showSnackBar(const SnackBar(content: Text('Montir berhasil dihapus')));
+                                          } catch (e) {
+                                            AppFeedback.playError();
+                                            messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _showMontirDialog({MontirModel? montir}) {
+    final namaCtrl = TextEditingController(text: montir?.nama ?? '');
+    final keahlianCtrl = TextEditingController(text: montir?.keahlian ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(montir == null ? 'Tambah Montir' : 'Edit Montir'),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: namaCtrl,
+                  decoration: const InputDecoration(labelText: 'Nama Montir'),
+                  validator: (val) => val!.isEmpty ? 'Wajib diisi' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: keahlianCtrl,
+                  decoration: const InputDecoration(labelText: 'Keahlian (mis. Mesin, Kelistrikan)'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              AppFeedback.playClick();
+              Navigator.pop(context);
+            }, 
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              AppFeedback.playClick();
+              if (formKey.currentState!.validate()) {
+                final messenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                try {
+                  if (montir == null) {
+                    await ref.read(adminControllerProvider.notifier).addMontir(namaCtrl.text, keahlianCtrl.text);
+                  } else {
+                    await ref.read(adminControllerProvider.notifier).updateMontir(montir.idMontir, namaCtrl.text, keahlianCtrl.text);
+                  }
+                  AppFeedback.playSuccess();
+                  navigator.pop();
+                  messenger.showSnackBar(const SnackBar(content: Text('Berhasil menyimpan montir')));
+                } catch (e) {
+                  AppFeedback.playError();
+                  messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- TAB 1 & 2: KELOLA RESERVASI CARDS ---
   Widget _buildQueueCardsView(AdminState state) {
+    // Filter logic
+    final filteredQueue = state.reservasi.where((res) {
+      if (_queueFilterStatus != 'Semua Status' && res.status != _queueFilterStatus) {
+        return false;
+      }
+      if (_queueSearchQuery.isNotEmpty) {
+        final q = _queueSearchQuery.toLowerCase();
+        return res.namaPelanggan.toLowerCase().contains(q) ||
+               res.platNomer.toLowerCase().contains(q) ||
+               res.merkKendaraan.toLowerCase().contains(q) ||
+               res.idReservasi.toString().contains(q);
+      }
+      return true;
+    }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -141,101 +447,178 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           'Kelola Antrean Reservasi',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
         ),
+        const SizedBox(height: 16),
+        _buildResponsiveRow([
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Cari nama, plat, merk, no rsv...',
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: const Color(0xFF1E1E1E),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onChanged: (val) {
+              setState(() {
+                _queueSearchQuery = val;
+              });
+            },
+          ),
+          DropdownButtonFormField<String>(
+            initialValue: _queueFilterStatus,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF1E1E1E),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            items: ['Semua Status', 'Menunggu Konfirmasi', 'Dikonfirmasi', 'Reschedule Diusulkan', 'Dalam Proses', 'Proses']
+                .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: (val) {
+              if (val != null) {
+                AppFeedback.playClick();
+                setState(() {
+                  _queueFilterStatus = val;
+                });
+              }
+            },
+          ),
+        ]),
         const SizedBox(height: 24),
         Expanded(
-          child: state.reservasi.isEmpty
+          child: filteredQueue.isEmpty
               ? const Center(child: Text('Belum ada data reservasi'))
               : ListView.builder(
-                  itemCount: state.reservasi.length,
+                  itemCount: filteredQueue.length,
                   itemBuilder: (context, index) {
-                    final res = state.reservasi[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Header row: RSV number + status badge
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              alignment: WrapAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'RSV-${res.idReservasi.toString().padLeft(4, '0')} | ${res.tanggal} ${res.jam}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusBg(res.status),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    res.status,
-                                    style: TextStyle(
-                                      color: _getStatusTextCol(res.status),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 24, color: Color(0xFF2D2D2D)),
-                            Text('Pelanggan: ${res.namaPelanggan} (${res.noHp})'),
-                            const SizedBox(height: 4),
-                            Text('Kendaraan: ${res.merkKendaraan} ${res.tipeKendaraan} - ${res.platNomer}'),
-                            const SizedBox(height: 4),
-                            Text('Keluhan: ${res.keluhan ?? "-"}'),
-                            if (res.namaMontir != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6.0),
-                                child: Text(
-                                  'Montir: ${res.namaMontir}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                    final res = filteredQueue[index];
+                    final delayMs = (index * 40).clamp(0, 400);
+
+                    return FadeInSlide(
+                      delay: Duration(milliseconds: delayMs),
+                      offset: const Offset(0, 15),
+                      child: Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: const Color(0xFF1D4ED8).withValues(alpha: 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 4,
+                                  color: const Color(0xFF1D4ED8),
                                 ),
                               ),
-                            const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                if (res.status == 'Menunggu Konfirmasi' || res.status == 'Dikonfirmasi') ...[
-                                  ElevatedButton.icon(
-                                    icon: const Icon(Icons.edit_calendar, size: 16),
-                                    label: const Text('Atur Jadwal & Montir'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1D4ED8),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Header row: RSV number + status badge
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      alignment: WrapAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'RSV-${res.idReservasi.toString().padLeft(4, '0')} | ${res.tanggal} ${res.jam}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusBg(res.status),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            res.status,
+                                            style: TextStyle(
+                                              color: _getStatusTextCol(res.status),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    onPressed: () => _loadReservasiToForm(res),
-                                  ),
-                                ],
-                                if (res.status == 'Dikonfirmasi' && res.idMontir != null) ...[
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                                    onPressed: () => _updateStatus(res.idReservasi, 'Proses'),
-                                    child: const Text('Mulai Proses'),
-                                  )
-                                ],
-                                if (res.status == 'Proses' || res.status == 'Dalam Proses') ...[
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                    onPressed: () => _updateStatus(res.idReservasi, 'Selesai'),
-                                    child: const Text('Selesaikan Servis'),
-                                  )
-                                ],
-                                if (res.status == 'Menunggu Konfirmasi') ...[
-                                  OutlinedButton(
-                                    onPressed: () => _updateStatus(res.idReservasi, 'Ditolak'),
-                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                                    child: const Text('Tolak'),
-                                  )
-                                ],
-                              ],
-                            ),
-                          ],
+                                    const Divider(height: 24, color: Color(0xFF2D2D2D)),
+                                    Text('Pelanggan: ${res.namaPelanggan} (${res.noHp})'),
+                                    const SizedBox(height: 4),
+                                    Text('Kendaraan: ${res.merkKendaraan} ${res.tipeKendaraan} - ${res.platNomer}'),
+                                    const SizedBox(height: 4),
+                                    Text('Keluhan: ${res.keluhan ?? "-"}'),
+                                    if (res.namaMontir != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6.0),
+                                        child: Text(
+                                          'Montir: ${res.namaMontir}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 16),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        if (res.status == 'Menunggu Konfirmasi' || res.status == 'Dikonfirmasi') ...[
+                                          ElevatedButton.icon(
+                                            icon: const Icon(Icons.edit_calendar, size: 16),
+                                            label: const Text('Atur Jadwal & Montir'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF1D4ED8),
+                                            ),
+                                            onPressed: () {
+                                              AppFeedback.playClick();
+                                              _loadReservasiToForm(res);
+                                            },
+                                          ),
+                                        ],
+                                        if (res.status == 'Dikonfirmasi' && res.idMontir != null) ...[
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+                                            onPressed: () {
+                                              AppFeedback.playClick();
+                                              _updateStatus(res.idReservasi, 'Proses');
+                                            },
+                                            child: const Text('Mulai Proses'),
+                                          )
+                                        ],
+                                        if (res.status == 'Proses' || res.status == 'Dalam Proses') ...[
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                            onPressed: () {
+                                              AppFeedback.playClick();
+                                              _updateStatus(res.idReservasi, 'Selesai');
+                                            },
+                                            child: const Text('Selesaikan Servis'),
+                                          )
+                                        ],
+                                        if (res.status == 'Menunggu Konfirmasi') ...[
+                                          OutlinedButton(
+                                            onPressed: () {
+                                              AppFeedback.playClick();
+                                              _updateStatus(res.idReservasi, 'Ditolak');
+                                            },
+                                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                                            child: const Text('Tolak'),
+                                          )
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -441,6 +824,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                           }
 
                           if (mounted) {
+                            AppFeedback.playSuccess();
                             ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Jadwal & Montir berhasil disimpan')));
                             setState(() {
@@ -450,6 +834,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                           }
                         } catch (e) {
                           if (mounted) {
+                            AppFeedback.playError();
                             ScaffoldMessenger.of(context)
                                 .showSnackBar(SnackBar(content: Text(e.toString())));
                           }
@@ -476,6 +861,16 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   Widget _buildLaporanSection(AdminState state) {
     final filteredList = state.reservasi.where((r) {
       if (_selectedStatus != 'Semua Status' && r.status != _selectedStatus) {
+        return false;
+      }
+      try {
+        final rDate = DateTime.parse(r.tanggal);
+        final start = DateTime(_startDate.year, _startDate.month, _startDate.day);
+        final end = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+        if (rDate.isBefore(start) || rDate.isAfter(end)) {
+          return false;
+        }
+      } catch (_) {
         return false;
       }
       return true;
@@ -511,7 +906,25 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                   items: ['Bulan Ini', 'Hari Ini', 'Semua']
                       .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                       .toList(),
-                  onChanged: (val) => setState(() => _selectedPeriod = val!),
+                  onChanged: (val) {
+                    AppFeedback.playClick();
+                    if (val != null) {
+                      final now = DateTime.now();
+                      setState(() {
+                        _selectedPeriod = val;
+                        if (val == 'Hari Ini') {
+                          _startDate = DateTime(now.year, now.month, now.day);
+                          _endDate = DateTime(now.year, now.month, now.day);
+                        } else if (val == 'Bulan Ini') {
+                          _startDate = DateTime(now.year, now.month, 1);
+                          _endDate = DateTime(now.year, now.month + 1, 0);
+                        } else if (val == 'Semua') {
+                          _startDate = DateTime(2025, 1, 1);
+                          _endDate = DateTime(2030, 12, 31);
+                        }
+                      });
+                    }
+                  },
                 ),
               ),
             ),
@@ -523,10 +936,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                   initialValue: _selectedStatus,
                   decoration: const InputDecoration(
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-                  items: ['Semua Status', 'Selesai', 'Dibatalkan', 'Dikonfirmasi', 'Proses']
+                  items: ['Semua Status', 'Selesai', 'Dibatalkan', 'Dikonfirmasi', 'Proses', 'Menunggu Konfirmasi', 'Reschedule Diusulkan']
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
-                  onChanged: (val) => setState(() => _selectedStatus = val!),
+                  onChanged: (val) {
+                    AppFeedback.playClick();
+                    setState(() => _selectedStatus = val!);
+                  },
                 ),
               ),
             ),
@@ -534,6 +950,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               label: 'Dari tanggal',
               child: InkWell(
                 onTap: () async {
+                  AppFeedback.playClick();
                   final picked = await showDatePicker(
                       context: context,
                       initialDate: _startDate,
@@ -562,6 +979,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               label: 'Sampai tanggal',
               child: InkWell(
                 onTap: () async {
+                  AppFeedback.playClick();
                   final picked = await showDatePicker(
                       context: context,
                       initialDate: _endDate,
@@ -587,7 +1005,10 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               ),
             ),
             ElevatedButton(
-              onPressed: () => ref.read(adminControllerProvider.notifier).loadData(),
+              onPressed: () {
+                AppFeedback.playClick();
+                ref.read(adminControllerProvider.notifier).loadData();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1D4ED8),
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -625,7 +1046,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
 
         const SizedBox(height: 24),
 
-        // Table layout
+        // Table layout - unified horizontal scroll
         Expanded(
           child: Container(
             decoration: BoxDecoration(
@@ -633,99 +1054,110 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFF2D2D2D)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  color: const Color(0xFF2D2D2D),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  child: const SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        SizedBox(width: 80, child: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 100, child: Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 140, child: Text('Pelanggan', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 200, child: Text('Kendaraan', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 120, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                      ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: 640,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Table Header
+                    Container(
+                      color: const Color(0xFF2D2D2D),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      child: const Row(
+                        children: [
+                          SizedBox(width: 80, child: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
+                          SizedBox(width: 100, child: Text('Tanggal', style: TextStyle(fontWeight: FontWeight.bold))),
+                          SizedBox(width: 140, child: Text('Pelanggan', style: TextStyle(fontWeight: FontWeight.bold))),
+                          SizedBox(width: 200, child: Text('Kendaraan', style: TextStyle(fontWeight: FontWeight.bold))),
+                          SizedBox(width: 120, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: filteredList.isEmpty
-                      ? const Center(child: Text('Tidak ada data reservasi'))
-                      : ListView.builder(
-                          itemCount: filteredList.length,
-                          itemBuilder: (context, index) {
-                            final res = filteredList[index];
-                            final isSelesai = res.status == 'Selesai';
-                            final isDibatalkan =
-                                res.status == 'Dibatalkan' || res.status == 'Ditolak';
 
-                            Color rowBgColor = Colors.transparent;
-                            Color statusTextColor = Colors.white;
-                            Color statusBgColor = Colors.transparent;
+                    // Table Rows
+                    Expanded(
+                      child: filteredList.isEmpty
+                          ? const Center(child: Text('Tidak ada data reservasi'))
+                          : ListView.builder(
+                              itemCount: filteredList.length,
+                              itemBuilder: (context, index) {
+                                final res = filteredList[index];
+                                final isSelesai = res.status == 'Selesai';
+                                final isDibatalkan =
+                                    res.status == 'Dibatalkan' || res.status == 'Ditolak';
 
-                            if (isSelesai) {
-                              rowBgColor = const Color(0xFFE6F4EA).withValues(alpha: 0.1);
-                              statusTextColor = const Color(0xFF137333);
-                              statusBgColor = const Color(0xFFE6F4EA);
-                            } else if (isDibatalkan) {
-                              rowBgColor = const Color(0xFFFCE8E6).withValues(alpha: 0.1);
-                              statusTextColor = const Color(0xFFC5221F);
-                              statusBgColor = const Color(0xFFFCE8E6);
-                            }
+                                Color rowBgColor = Colors.transparent;
+                                Color statusTextColor = Colors.white;
+                                Color statusBgColor = Colors.transparent;
 
-                            return SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Container(
-                                color: rowBgColor,
-                                decoration: const BoxDecoration(
-                                    border: Border(
-                                        bottom: BorderSide(color: Color(0xFF2D2D2D)))),
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 12, horizontal: 16),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 80,
-                                      child: Text(
-                                        'RSV-${res.idReservasi.toString().padLeft(4, '0')}',
-                                        style: const TextStyle(
-                                            color: Color(0xFF3B82F6),
-                                            fontWeight: FontWeight.bold),
-                                      ),
+                                if (isSelesai) {
+                                  rowBgColor = const Color(0xFFE6F4EA).withValues(alpha: 0.1);
+                                  statusTextColor = const Color(0xFF137333);
+                                  statusBgColor = const Color(0xFFE6F4EA);
+                                } else if (isDibatalkan) {
+                                  rowBgColor = const Color(0xFFFCE8E6).withValues(alpha: 0.1);
+                                  statusTextColor = const Color(0xFFC5221F);
+                                  statusBgColor = const Color(0xFFFCE8E6);
+                                }
+
+                                final delayMs = (index * 40).clamp(0, 400);
+
+                                return FadeInSlide(
+                                  delay: Duration(milliseconds: delayMs),
+                                  offset: const Offset(0, 10),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                        color: rowBgColor,
+                                        border: const Border(
+                                            bottom: BorderSide(color: Color(0xFF2D2D2D)))),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12, horizontal: 16),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 80,
+                                          child: Text(
+                                            'RSV-${res.idReservasi.toString().padLeft(4, '0')}',
+                                            style: const TextStyle(
+                                                color: Color(0xFF3B82F6),
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        SizedBox(width: 100, child: Text(res.tanggal)),
+                                        SizedBox(width: 140, child: Text(res.namaPelanggan)),
+                                        SizedBox(
+                                            width: 200,
+                                            child: Text(
+                                                '${res.merkKendaraan} ${res.tipeKendaraan} (${res.platNomer})')),
+                                        SizedBox(
+                                          width: 120,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                                color: statusBgColor.withValues(alpha: 0.85),
+                                                borderRadius: BorderRadius.circular(4)),
+                                            child: Text(
+                                              res.status,
+                                              style: TextStyle(
+                                                  color: statusTextColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    SizedBox(width: 100, child: Text(res.tanggal)),
-                                    SizedBox(width: 140, child: Text(res.namaPelanggan)),
-                                    SizedBox(
-                                        width: 200,
-                                        child: Text(
-                                            '${res.merkKendaraan} ${res.tipeKendaraan} (${res.platNomer})')),
-                                    SizedBox(
-                                      width: 120,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                            color: statusBgColor.withValues(alpha: 0.85),
-                                            borderRadius: BorderRadius.circular(4)),
-                                        child: Text(res.status,
-                                            style: TextStyle(
-                                                color: statusTextColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -739,27 +1171,23 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           alignment: WrapAlignment.end,
           children: [
             ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Mengekspor laporan ke CSV...')));
+              onPressed: () async {
+                AppFeedback.playClick();
+                try {
+                  await ref.read(adminControllerProvider.notifier).exportCsv(filteredList);
+                  if (!mounted) return;
+                  AppFeedback.playSuccess();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Berhasil mengekspor laporan CSV')));
+                } catch (e) {
+                  if (!mounted) return;
+                  AppFeedback.playError();
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengekspor: $e')));
+                }
               },
               icon: const Icon(Icons.insert_drive_file),
               label: const Text('Export CSV'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Mencetak laporan...')));
-              },
-              icon: const Icon(Icons.print),
-              label: const Text('Cetak Laporan'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1D4ED8),
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               ),
@@ -868,15 +1296,81 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   void _updateStatus(int idReservasi, String status) async {
     try {
       await ref.read(adminControllerProvider.notifier).updateStatus(idReservasi, status);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Status reservasi diperbarui menjadi $status')));
-      }
+      if (!mounted) return;
+      AppFeedback.playSuccess();
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Status reservasi diperbarui menjadi $status')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (!mounted) return;
+      AppFeedback.playError();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  Widget _buildShimmerLoadingList() {
+    return ListView.builder(
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return const Padding(
+          padding: EdgeInsets.only(bottom: 16.0),
+          child: ShimmerPlaceholder(
+            height: 140,
+            borderRadius: 12,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PulsingDot extends StatefulWidget {
+  final Color color;
+  const PulsingDot({super.key, required this.color});
+
+  @override
+  State<PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<PulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withValues(alpha: 0.5 * (1.0 - _controller.value)),
+                blurRadius: 6,
+                spreadRadius: 3 * _controller.value,
+              )
+            ],
+          ),
+        );
+      },
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../application/auth_controller.dart';
+import '../../../core/utils/app_feedback.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -35,10 +36,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     ref.listen(authControllerProvider, (previous, next) {
       if (next.error != null) {
+        AppFeedback.playError();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next.error!)),
         );
       } else if (next.user != null) {
+        AppFeedback.playSuccess();
         // Navigate based on role
         if (next.user!.role == 'Admin') {
           context.go('/admin');
@@ -145,7 +148,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     
                     // Login Button (Blue)
                     ElevatedButton(
-                      onPressed: authState.isLoading ? null : _login,
+                      onPressed: authState.isLoading
+                          ? null
+                          : () {
+                              AppFeedback.playClick();
+                              _login();
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor, // Royal Blue
                         foregroundColor: Colors.white,
@@ -166,7 +174,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     
                     // Register Navigation Link
                     TextButton(
-                      onPressed: () => context.go('/register'),
+                      onPressed: () {
+                        AppFeedback.playClick();
+                        context.go('/register');
+                      },
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFF3B82F6), // Light blue link text
                       ),

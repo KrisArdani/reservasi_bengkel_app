@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../application/auth_controller.dart';
+import '../../../core/utils/app_feedback.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -46,10 +47,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     ref.listen(authControllerProvider, (previous, next) {
       if (next.error != null) {
+        AppFeedback.playError();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next.error!)),
         );
       } else if (next.user != null) {
+        AppFeedback.playSuccess();
         context.go('/customer');
       }
     });
@@ -207,7 +210,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: authState.isLoading ? null : _register,
+                            onPressed: authState.isLoading
+                                ? null
+                                : () {
+                                    AppFeedback.playClick();
+                                    _register();
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Theme.of(context).primaryColor, // Royal Blue
                               foregroundColor: Colors.white,
@@ -228,7 +236,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: () => context.go('/login'),
+                            onPressed: () {
+                              AppFeedback.playClick();
+                              context.go('/login');
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF334155), // Slate / Batal button color
                               foregroundColor: Colors.white,
